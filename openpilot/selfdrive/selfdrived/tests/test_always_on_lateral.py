@@ -1,6 +1,9 @@
+from openpilot.cereal import log
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.selfdrive.selfdrived.events import Events, ET, EVENTS, NormalPermanentAlert
 from openpilot.selfdrive.selfdrived.state import always_on_lateral_allowed
+
+EventName = log.OnroadEvent.EventName
 
 
 def make_event(event_types):
@@ -33,3 +36,11 @@ class TestAlwaysOnLateral(OpenpilotTestCase):
       self.events.clear()
       self.events.add(make_event([et, ET.WARNING]))
       assert not always_on_lateral_allowed(self.events, cruise_available=True), et
+
+  def test_steer_while_braking_exempts_only_the_brake(self):
+    self.events.add(EventName.pedalPressed)
+    assert not always_on_lateral_allowed(self.events, cruise_available=True)
+    assert always_on_lateral_allowed(self.events, cruise_available=True, steer_while_braking=True)
+    # anything else that blocks entry still blocks
+    self.events.add(EventName.doorOpen)
+    assert not always_on_lateral_allowed(self.events, cruise_available=True, steer_while_braking=True)

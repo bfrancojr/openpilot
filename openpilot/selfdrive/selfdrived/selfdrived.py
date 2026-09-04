@@ -104,6 +104,7 @@ class SelfdriveD:
     self.disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
     # decided once by card and recorded in CarParams, so it can't disagree with the panda
     self.always_on_lateral = bool(self.CP.alternativeExperience & ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL)
+    self.always_on_lateral_while_braking = bool(self.CP.alternativeExperience & ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL_WHILE_BRAKING)
 
     car_recognized = self.CP.brand != 'mock'
 
@@ -560,7 +561,8 @@ class SelfdriveD:
     self.update_events(CS)
     if not self.CP.passive and self.initialized:
       self.enabled, self.active = self.state_machine.update(self.events)
-      self.lateral_active = self.active or (self.always_on_lateral and always_on_lateral_allowed(self.events, CS.cruiseState.available))
+      self.lateral_active = self.active or (self.always_on_lateral and
+                                            always_on_lateral_allowed(self.events, CS.cruiseState.available, self.always_on_lateral_while_braking))
       # steering without being engaged still warrants the engaged-only warning alerts
       if self.lateral_active and ET.WARNING not in self.state_machine.current_alert_types:
         self.state_machine.current_alert_types.append(ET.WARNING)

@@ -126,6 +126,8 @@ class Car:
     if self.params.get_bool("AlwaysOnLateral") and always_on_lateral_supported and not self.CP.passive:
       self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL
       self.CP.safetyConfigs[0].safetyParam |= ToyotaSafetyFlags.ACC_MAIN_ON
+      if self.params.get_bool("AlwaysOnLateralWhileBraking"):
+        self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL_WHILE_BRAKING
 
     if self.CP.secOcRequired:
       # Copy user key if available

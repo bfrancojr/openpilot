@@ -1,8 +1,9 @@
 from openpilot.cereal import log
-from openpilot.selfdrive.selfdrived.events import Events, ET
+from openpilot.selfdrive.selfdrived.events import Events, ET, EVENTS
 from openpilot.common.realtime import DT_CTRL
 
 State = log.SelfdriveState.OpenpilotState
+EventName = log.OnroadEvent.EventName
 
 SOFT_DISABLE_TIME = 3  # seconds
 ACTIVE_STATES = (State.enabled, State.softDisabling, State.overriding)
@@ -97,10 +98,13 @@ class StateMachine:
     return enabled, active
 
 
-def always_on_lateral_allowed(events: Events, cruise_available: bool) -> bool:
+def always_on_lateral_allowed(events: Events, cruise_available: bool, steer_while_braking: bool = False) -> bool:
   """Always-on lateral steers whenever openpilot could be engaged: the car's cruise main
-  switch is on and no event blocks entry or would disable. Panda safety mirrors this by
-  gating on the ACC main switch and the brake."""
-  blocked = events.contains(ET.NO_ENTRY) or events.contains(ET.SOFT_DISABLE) or events.contains(ET.IMMEDIATE_DISABLE)
+  switch is on and no event blocks entry or would disable. With steer_while_braking the
+  brake (pedalPressed) is exempt. Panda safety mirrors both through the alternative
+  experience flags."""
+  ignored = {EventName.pedalPressed} if steer_while_braking else set()
+  blocking = (ET.NO_ENTRY, ET.SOFT_DISABLE, ET.IMMEDIATE_DISABLE)
+  blocked = any(et in EVENTS.get(e, {}) for e in events.names if e not in ignored for et in blocking)
   return cruise_available and not blocked
 
