@@ -48,6 +48,8 @@ class TogglesLayoutMici(NavScroller):
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM")
     always_on_lateral_toggle = BigParamControl("always-on lateral (toyota)", "AlwaysOnLateral", toggle_callback=restart_needed_callback)
+    always_on_lateral_braking_toggle = BigParamControl("always-on lateral: steer while braking", "AlwaysOnLateralWhileBraking",
+                                                       toggle_callback=restart_needed_callback)
     record_front = BigParamControl("record & upload cabin camera", "RecordFront", toggle_callback=restart_needed_callback)
     record_mic = BigParamControl("record & upload mic audio", "RecordAudio", toggle_callback=restart_needed_callback)
     enable_openpilot = BigParamControl("enable openpilot", "OpenpilotEnabledToggle", toggle_callback=restart_needed_callback)
@@ -59,6 +61,7 @@ class TogglesLayoutMici(NavScroller):
       ldw_toggle,
       always_on_dm_toggle,
       always_on_lateral_toggle,
+      always_on_lateral_braking_toggle,
       record_front,
       record_mic,
       enable_openpilot,
@@ -71,6 +74,7 @@ class TogglesLayoutMici(NavScroller):
       ("IsLdwEnabled", ldw_toggle),
       ("AlwaysOnDM", always_on_dm_toggle),
       ("AlwaysOnLateral", always_on_lateral_toggle),
+      ("AlwaysOnLateralWhileBraking", always_on_lateral_braking_toggle),
       ("RecordFront", record_front),
       ("RecordAudio", record_mic),
       ("OpenpilotEnabledToggle", enable_openpilot),
@@ -80,6 +84,7 @@ class TogglesLayoutMici(NavScroller):
     record_front.set_enabled(False if ui_state.params.get_bool("RecordFrontLock") else (lambda: not ui_state.engaged))
     record_mic.set_enabled(lambda: not ui_state.engaged)
     always_on_lateral_toggle.set_enabled(lambda: not ui_state.engaged)
+    always_on_lateral_braking_toggle.set_enabled(lambda: not ui_state.engaged)
 
     if ui_state.params.get_bool("ShowDebugInfo"):
       gui_app.set_show_touches(True)

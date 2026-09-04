@@ -32,6 +32,10 @@ DESCRIPTIONS = {
     "Steer whenever the car's cruise control main switch is on, without setting a speed. Toyota only. " +
     "Driver monitoring stays active while steering."
   ),
+  "AlwaysOnLateralWhileBraking": tr_noop(
+    "Keep steering while the brake is pressed. When off, Always-On Lateral pauses while braking and resumes " +
+    "when the brake is released, like a disengage. Only applies with Always-On Lateral."
+  ),
   'RecordFront': tr_noop("Upload data from the cabin camera and help improve the driver monitoring algorithm."),
   "IsMetric": tr_noop("Display speed in km/h instead of mph."),
   "RecordAudio": tr_noop("Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect."),
@@ -79,6 +83,12 @@ class TogglesLayout(Widget):
       "AlwaysOnLateral": (
         lambda: tr("Always-On Lateral"),
         DESCRIPTIONS["AlwaysOnLateral"],
+        "chffr_wheel.png",
+        True,
+      ),
+      "AlwaysOnLateralWhileBraking": (
+        lambda: tr("Always-On Lateral: Steer While Braking"),
+        DESCRIPTIONS["AlwaysOnLateralWhileBraking"],
         "chffr_wheel.png",
         True,
       ),
