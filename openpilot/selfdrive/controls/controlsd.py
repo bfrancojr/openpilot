@@ -13,6 +13,7 @@ from openpilot.common.swaglog import cloudlog
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.vehicle_model import VehicleModel
 from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature
+from openpilot.selfdrive.controls.lib.lane_offset import LaneOffsetController
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
 from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle, STEER_ANGLE_SATURATION_THRESHOLD
@@ -47,6 +48,11 @@ class Controls:
     self.curvature = 0.0
     self.desired_curvature = 0.0
 
+    self.lane_offset = LaneOffsetController(DT_CTRL)
+    self.lane_offset_enabled = False
+    self.lane_offset_target = 0.0
+    self.read_lane_offset_params()
+
     self.pose_calibrator = PoseCalibrator()
     self.calibrated_pose: Pose | None = None
 
@@ -62,8 +68,14 @@ class Controls:
     elif self.CP.lateralTuning.which() == 'torque':
       self.LaC = LatControlTorque(self.CP, self.CI, DT_CTRL)
 
+  def read_lane_offset_params(self):
+    self.lane_offset_enabled = self.params.get_bool("LaneOffsetCorrection")
+    self.lane_offset_target = (self.params.get("LaneOffsetCm") or 0) / 100.0  # positive = right of the lane centre
+
   def update(self):
     self.sm.update(15)
+    if self.sm.frame % int(1. / DT_CTRL) == 0:
+      self.read_lane_offset_params()
     if self.sm.updated["extrinsicsCalibration"]:
       self.pose_calibrator.feed_extrinsics_calibration(self.sm['extrinsicsCalibration'])
     if self.sm.updated["deviceMotion"]:
@@ -124,6 +136,9 @@ class Controls:
       new_desired_curvature = self.sm['lateralManeuverPlan'].desiredCurvature if CC.latActive else self.curvature
     else:
       new_desired_curvature = model_v2.action.desiredCurvature if CC.latActive else self.curvature
+    # hold the car at the driver's offset from the lane centre; inert unless enabled and steering
+    lane_offset_active = CC.latActive and self.lane_offset_enabled and not self.sm.valid['lateralManeuverPlan']
+    new_desired_curvature += self.lane_offset.update(lane_offset_active, self.lane_offset_target, model_v2, CS)
     self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, new_desired_curvature, lp.roll)
     lat_delay = self.sm["lateralDelay"].lateralDelay + LAT_SMOOTH_SECONDS
 
