@@ -3,13 +3,36 @@ from collections.abc import Callable
 from openpilot.cereal import log
 
 from openpilot.system.ui.widgets.scroller import NavScroller
-from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle, BigToggle, GreyBigButton
+from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigParamControl, BigMultiParamToggle, BigToggle, GreyBigButton
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigConfirmationCircleButton
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.selfdrive.ui.layouts.settings.common import restart_needed_callback
 from openpilot.selfdrive.ui.ui_state import ui_state
 
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
+
+# lane offset correction target, stored in LaneOffsetCm (positive = right of the lane centre)
+LANE_OFFSET_OPTIONS = {"30 cm left": -30, "20 cm left": -20, "10 cm left": -10, "centered": 0,
+                       "10 cm right": 10, "20 cm right": 20, "30 cm right": 30}
+
+
+class LaneOffsetButton(BigButton):
+  """Cycles through the lane offset targets on each tap."""
+
+  def __init__(self):
+    super().__init__("lane offset", "centered")
+    self.refresh()
+
+  def refresh(self):
+    cm = ui_state.params.get("LaneOffsetCm") or 0
+    self.set_value(next((label for label, value in LANE_OFFSET_OPTIONS.items() if value == cm), "centered"))
+
+  def _handle_mouse_release(self, mouse_pos):
+    super()._handle_mouse_release(mouse_pos)
+    labels = list(LANE_OFFSET_OPTIONS)
+    label = labels[(labels.index(self.get_value()) + 1) % len(labels)]
+    self.set_value(label)
+    ui_state.params.put("LaneOffsetCm", LANE_OFFSET_OPTIONS[label], block=True)
 
 
 class ExperimentalModeConfirmPage(NavScroller):
@@ -50,6 +73,8 @@ class TogglesLayoutMici(NavScroller):
     always_on_lateral_toggle = BigParamControl("always-on lateral (toyota)", "AlwaysOnLateral", toggle_callback=restart_needed_callback)
     always_on_lateral_braking_toggle = BigParamControl("always-on lateral: steer while braking", "AlwaysOnLateralWhileBraking",
                                                        toggle_callback=restart_needed_callback)
+    lane_offset_toggle = BigParamControl("lane offset correction", "LaneOffsetCorrection")
+    self._lane_offset_btn = LaneOffsetButton()
     record_front = BigParamControl("record & upload cabin camera", "RecordFront", toggle_callback=restart_needed_callback)
     record_mic = BigParamControl("record & upload mic audio", "RecordAudio", toggle_callback=restart_needed_callback)
     enable_openpilot = BigParamControl("enable openpilot", "OpenpilotEnabledToggle", toggle_callback=restart_needed_callback)
@@ -62,6 +87,8 @@ class TogglesLayoutMici(NavScroller):
       always_on_dm_toggle,
       always_on_lateral_toggle,
       always_on_lateral_braking_toggle,
+      lane_offset_toggle,
+      self._lane_offset_btn,
       record_front,
       record_mic,
       enable_openpilot,
@@ -75,6 +102,7 @@ class TogglesLayoutMici(NavScroller):
       ("AlwaysOnDM", always_on_dm_toggle),
       ("AlwaysOnLateral", always_on_lateral_toggle),
       ("AlwaysOnLateralWhileBraking", always_on_lateral_braking_toggle),
+      ("LaneOffsetCorrection", lane_offset_toggle),
       ("RecordFront", record_front),
       ("RecordAudio", record_mic),
       ("OpenpilotEnabledToggle", enable_openpilot),
@@ -123,6 +151,7 @@ class TogglesLayoutMici(NavScroller):
     # Refresh toggles from params to mirror external changes
     for key, item in self._refresh_toggles:
       item.set_checked(ui_state.params.get_bool(key))
+    self._lane_offset_btn.refresh()
 
   def _on_experimental_mode(self, state: bool):
     if state and not ui_state.params.get_bool("ExperimentalModeConfirmed"):

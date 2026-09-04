@@ -10,6 +10,7 @@ from openpilot.system.ui.widgets import DialogResult
 from openpilot.selfdrive.ui.ui_state import ui_state
 
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
+LANE_OFFSET_CM = [-30, -20, -10, 0, 10, 20, 30]  # LaneOffsetCm, positive = right of the lane centre
 
 # Description constants
 DESCRIPTIONS = {
@@ -36,6 +37,11 @@ DESCRIPTIONS = {
     "Keep steering while the brake is pressed. When off, Always-On Lateral pauses while braking and resumes " +
     "when the brake is released, like a disengage. Only applies with Always-On Lateral."
   ),
+  "LaneOffsetCorrection": tr_noop(
+    "Hold the car at the chosen offset from the centre of the lane lines instead of where the driving model puts it. " +
+    "Only acts with two confident lane lines, above 11 mph (18 km/h) and with no turn signal on."
+  ),
+  "LaneOffsetCm": tr_noop("Where to hold the car relative to the lane centre, in cm. L is left, R is right."),
   'RecordFront': tr_noop("Upload data from the cabin camera and help improve the driver monitoring algorithm."),
   "IsMetric": tr_noop("Display speed in km/h instead of mph."),
   "RecordAudio": tr_noop("Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect."),
@@ -92,6 +98,12 @@ class TogglesLayout(Widget):
         "chffr_wheel.png",
         True,
       ),
+      "LaneOffsetCorrection": (
+        lambda: tr("Lane Offset Correction"),
+        DESCRIPTIONS["LaneOffsetCorrection"],
+        "chffr_wheel.png",
+        False,
+      ),
       "RecordFront": (
         lambda: tr("Record and Upload Cabin Camera"),
         DESCRIPTIONS["RecordFront"],
@@ -120,6 +132,17 @@ class TogglesLayout(Widget):
       callback=self._set_longitudinal_personality,
       selected_index=self._params.get("LongitudinalPersonality", return_default=True),
       icon="speed_limit.png"
+    )
+
+    lane_offset_cm = self._params.get("LaneOffsetCm") or 0
+    self._lane_offset_setting = multiple_button_item(
+      lambda: tr("Lane Offset"),
+      lambda: tr(DESCRIPTIONS["LaneOffsetCm"]),
+      buttons=[lambda: "30L", lambda: "20L", lambda: "10L", lambda: "0", lambda: "10R", lambda: "20R", lambda: "30R"],
+      button_width=120,
+      callback=self._set_lane_offset,
+      selected_index=LANE_OFFSET_CM.index(lane_offset_cm) if lane_offset_cm in LANE_OFFSET_CM else LANE_OFFSET_CM.index(0),
+      icon="chffr_wheel.png"
     )
 
     self._toggles = {}
@@ -154,6 +177,8 @@ class TogglesLayout(Widget):
       # insert longitudinal personality after NDOG toggle
       if param == "DisengageOnAccelerator":
         self._toggles["LongitudinalPersonality"] = self._long_personality_setting
+      if param == "LaneOffsetCorrection":
+        self._toggles["LaneOffsetCm"] = self._lane_offset_setting
 
     self._update_experimental_mode_icon()
     self._scroller = Scroller(list(self._toggles.values()), line_separator=True, spacing=0)
@@ -263,3 +288,6 @@ class TogglesLayout(Widget):
 
   def _set_longitudinal_personality(self, button_index: int):
     self._params.put("LongitudinalPersonality", button_index, block=True)
+
+  def _set_lane_offset(self, button_index: int):
+    self._params.put("LaneOffsetCm", LANE_OFFSET_CM[button_index], block=True)
