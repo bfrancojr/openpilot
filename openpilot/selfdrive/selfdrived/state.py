@@ -96,3 +96,11 @@ class StateMachine:
       self.current_alert_types.append(ET.WARNING)
     return enabled, active
 
+
+def always_on_lateral_allowed(events: Events, cruise_available: bool) -> bool:
+  """Always-on lateral steers whenever openpilot could be engaged: the car's cruise main
+  switch is on and no event blocks entry or would disable. Panda safety mirrors this by
+  gating on the ACC main switch and the brake."""
+  blocked = events.contains(ET.NO_ENTRY) or events.contains(ET.SOFT_DISABLE) or events.contains(ET.IMMEDIATE_DISABLE)
+  return cruise_available and not blocked
+

@@ -20,11 +20,12 @@ from openpilot.selfdrive.car.car_events import CarEvents
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 from openpilot.selfdrive.selfdrived.events import Events, ET
 from openpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck
-from openpilot.selfdrive.selfdrived.state import StateMachine
+from openpilot.selfdrive.selfdrived.state import StateMachine, always_on_lateral_allowed
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
 
 from openpilot.common.version import get_build_metadata
 from openpilot.common.hardware import HARDWARE
+from opendbc.safety import ALTERNATIVE_EXPERIENCE
 
 REPLAY = "REPLAY" in os.environ
 SIMULATION = "SIMULATION" in os.environ
@@ -101,6 +102,8 @@ class SelfdriveD:
     self.is_metric = self.params.get_bool("IsMetric")
     self.is_ldw_enabled = self.params.get_bool("IsLdwEnabled")
     self.disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
+    # decided once by card and recorded in CarParams, so it can't disagree with the panda
+    self.always_on_lateral = bool(self.CP.alternativeExperience & ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL)
 
     car_recognized = self.CP.brand != 'mock'
 
@@ -117,6 +120,7 @@ class SelfdriveD:
     self.initialized = False
     self.enabled = False
     self.active = False
+    self.lateral_active = False
     self.mismatch_counter = 0
     self.cruise_mismatch_counter = 0
     self.last_steering_pressed_frame = 0
@@ -527,6 +531,7 @@ class SelfdriveD:
     ss = ss_msg.selfdriveState
     ss.enabled = self.enabled
     ss.active = self.active
+    ss.lateralActive = self.lateral_active
     ss.state = self.state_machine.state
     ss.engageable = not self.events.contains(ET.NO_ENTRY)
     ss.experimentalMode = self.experimental_mode
@@ -555,6 +560,10 @@ class SelfdriveD:
     self.update_events(CS)
     if not self.CP.passive and self.initialized:
       self.enabled, self.active = self.state_machine.update(self.events)
+      self.lateral_active = self.active or (self.always_on_lateral and always_on_lateral_allowed(self.events, CS.cruiseState.available))
+      # steering without being engaged still warrants the engaged-only warning alerts
+      if self.lateral_active and ET.WARNING not in self.state_machine.current_alert_types:
+        self.state_machine.current_alert_types.append(ET.WARNING)
     self.update_alerts(CS)
 
     self.publish_selfdriveState(CS)

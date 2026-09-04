@@ -18,6 +18,8 @@ from opendbc.car.carlog import carlog
 from opendbc.car.fw_versions import ObdCallback
 from opendbc.car.car_helpers import get_car, interfaces
 from opendbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
+from opendbc.car.toyota.values import ToyotaFlags, ToyotaSafetyFlags
+from opendbc.safety import ALTERNATIVE_EXPERIENCE
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.cruise import VCruiseHelper
 
@@ -116,6 +118,14 @@ class Car:
       safety_config = structs.CarParams.SafetyConfig()
       safety_config.safetyModel = structs.CarParams.SafetyModel.noOutput
       self.CP.safetyConfigs = [safety_config]
+
+    # Always-on lateral: steer whenever the stock ACC main switch is on, without engaging.
+    # Toyota only: panda safety reads the main switch from PCM_CRUISE_2 (0x1D3), which
+    # UNSUPPORTED_DSU cars don't send and SecOC cars don't use.
+    always_on_lateral_supported = self.CP.brand == 'toyota' and not (self.CP.flags & (ToyotaFlags.UNSUPPORTED_DSU | ToyotaFlags.SECOC))
+    if self.params.get_bool("AlwaysOnLateral") and always_on_lateral_supported and not self.CP.passive:
+      self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL
+      self.CP.safetyConfigs[0].safetyParam |= ToyotaSafetyFlags.ACC_MAIN_ON
 
     if self.CP.secOcRequired:
       # Copy user key if available
