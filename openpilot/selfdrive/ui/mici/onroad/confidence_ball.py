@@ -54,7 +54,7 @@ class ConfidenceBall(Widget):
     dot_height = self._rect.y + dot_height
 
     # confidence zones
-    if ui_state.status == UIStatus.ENGAGED or self._demo:
+    if ui_state.status in (UIStatus.ENGAGED, UIStatus.LATERAL) or self._demo:
       if self._confidence_filter.x > 0.5:
         top_dot_color = rl.Color(0, 255, 204, 255)
         bottom_dot_color = rl.Color(0, 255, 38, 255)

@@ -28,6 +28,10 @@ DESCRIPTIONS = {
     "without a turn signal activated while driving over 31 mph (50 km/h)."
   ),
   "AlwaysOnDM": tr_noop("Enable driver monitoring even when openpilot is not engaged."),
+  "AlwaysOnLateral": tr_noop(
+    "Steer whenever the car's cruise control main switch is on, without setting a speed. Toyota only. " +
+    "Driver monitoring stays active while steering."
+  ),
   'RecordFront': tr_noop("Upload data from the cabin camera and help improve the driver monitoring algorithm."),
   "IsMetric": tr_noop("Display speed in km/h instead of mph."),
   "RecordAudio": tr_noop("Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect."),
@@ -71,6 +75,12 @@ class TogglesLayout(Widget):
         DESCRIPTIONS["AlwaysOnDM"],
         "monitoring.png",
         False,
+      ),
+      "AlwaysOnLateral": (
+        lambda: tr("Always-On Lateral"),
+        DESCRIPTIONS["AlwaysOnLateral"],
+        "chffr_wheel.png",
+        True,
       ),
       "RecordFront": (
         lambda: tr("Record and Upload Cabin Camera"),

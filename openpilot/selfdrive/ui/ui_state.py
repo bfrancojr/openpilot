@@ -22,6 +22,7 @@ PARAM_UPDATE_TIME = 1 / 5.0
 class UIStatus(Enum):
   DISENGAGED = "disengaged"
   ENGAGED = "engaged"
+  LATERAL = "lateral"  # always-on lateral steering, not engaged
   OVERRIDE = "override"
 
 
@@ -124,7 +125,7 @@ class UIState:
 
   @property
   def engaged(self) -> bool:
-    return self.started and self.sm["selfdriveState"].enabled
+    return self.started and (self.sm["selfdriveState"].enabled or self.sm["selfdriveState"].lateralActive)
 
   def is_onroad(self) -> bool:
     return self.started
@@ -187,8 +188,12 @@ class UIState:
 
       if state in (log.SelfdriveState.OpenpilotState.preEnabled, log.SelfdriveState.OpenpilotState.overriding):
         self.status = UIStatus.OVERRIDE
+      elif ss.enabled:
+        self.status = UIStatus.ENGAGED
+      elif ss.lateralActive:
+        self.status = UIStatus.LATERAL
       else:
-        self.status = UIStatus.ENGAGED if ss.enabled else UIStatus.DISENGAGED
+        self.status = UIStatus.DISENGAGED
 
     # Check for engagement state changes
     if self.engaged != self._engaged_prev:
