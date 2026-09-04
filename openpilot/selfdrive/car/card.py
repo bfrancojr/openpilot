@@ -31,6 +31,23 @@ EventName = log.OnroadEvent.EventName
 carlog.addHandler(ForwardingHandler(cloudlog))
 
 
+def apply_always_on_lateral(CP: car.CarParams, always_on: bool, while_braking: bool) -> bool:
+  """Always-on lateral: steer whenever the stock ACC main switch is on, without engaging.
+
+  Toyota only: panda safety reads the main switch from PCM_CRUISE_2 (0x1D3), which
+  UNSUPPORTED_DSU cars don't send and SecOC cars don't use. Returns whether it was enabled.
+  """
+  supported = CP.brand == 'toyota' and not (CP.flags & (ToyotaFlags.UNSUPPORTED_DSU | ToyotaFlags.SECOC))
+  if not (always_on and supported and not CP.passive):
+    return False
+  CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL
+  # .value: capnp rejects IntFlag instances, and int | IntFlag yields an IntFlag
+  CP.safetyConfigs[0].safetyParam |= ToyotaSafetyFlags.ACC_MAIN_ON.value
+  if while_braking:
+    CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL_WHILE_BRAKING
+  return True
+
+
 def obd_callback(params: Params) -> ObdCallback:
   def set_obd_multiplexing(obd_multiplexing: bool):
     if params.get_bool("ObdMultiplexingEnabled") != obd_multiplexing:
@@ -119,15 +136,7 @@ class Car:
       safety_config.safetyModel = structs.CarParams.SafetyModel.noOutput
       self.CP.safetyConfigs = [safety_config]
 
-    # Always-on lateral: steer whenever the stock ACC main switch is on, without engaging.
-    # Toyota only: panda safety reads the main switch from PCM_CRUISE_2 (0x1D3), which
-    # UNSUPPORTED_DSU cars don't send and SecOC cars don't use.
-    always_on_lateral_supported = self.CP.brand == 'toyota' and not (self.CP.flags & (ToyotaFlags.UNSUPPORTED_DSU | ToyotaFlags.SECOC))
-    if self.params.get_bool("AlwaysOnLateral") and always_on_lateral_supported and not self.CP.passive:
-      self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL
-      self.CP.safetyConfigs[0].safetyParam |= ToyotaSafetyFlags.ACC_MAIN_ON
-      if self.params.get_bool("AlwaysOnLateralWhileBraking"):
-        self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL_WHILE_BRAKING
+    apply_always_on_lateral(self.CP, self.params.get_bool("AlwaysOnLateral"), self.params.get_bool("AlwaysOnLateralWhileBraking"))
 
     if self.CP.secOcRequired:
       # Copy user key if available
