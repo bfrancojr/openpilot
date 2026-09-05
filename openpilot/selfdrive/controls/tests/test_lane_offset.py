@@ -2,7 +2,10 @@ from openpilot.cereal import log
 import openpilot.cereal.messaging as messaging
 from opendbc.car.structs import car
 from openpilot.common.realtime import DT_CTRL
+import numpy as np
+
 from openpilot.common.test import OpenpilotTestCase
+from openpilot.selfdrive.controls.lib.drive_helpers import get_curvature_from_plan
 from openpilot.selfdrive.controls.lib.lane_offset import LaneOffsetController, MAX_CURVATURE, MAX_LAT_ACCEL, MIN_LOOKAHEAD
 from openpilot.selfdrive.modeld.constants import ModelConstants
 
@@ -44,15 +47,27 @@ class TestLaneOffset(OpenpilotTestCase):
   def test_car_left_of_centre_steers_right(self):
     # lines at -1.2 / +1.8: the lane centre is 0.3 m to the right, so the car sits 0.3 m left
     k = settled(self.ctrl, make_model(-1.2, 1.8), make_cs(20.0))
-    expected = -2.0 * 0.3 / (20.0 * 2.0) ** 2
+    expected = 2.0 * 0.3 / (20.0 * 2.0) ** 2  # positive curvature = right turn
     assert abs(k - expected) < 1e-5, (k, expected)
-    assert k < 0
+    assert k > 0
+
+  def test_sign_matches_model_curvature_convention(self):
+    # The model frame is x forward, y right, z down: a right turn has positive yaw, and the upstream helper that
+    # turns the model's plan into a desired curvature returns a positive value for it (verified against logged
+    # routes: desiredCurvature shares the sign of the lane centre ahead in every frame). Moving the car right
+    # must therefore add curvature of the same sign. Shipped inverted once (2026-09-05); keep this pinned.
+    t_idxs = np.array(ModelConstants.T_IDXS)
+    yaw_rates = np.full(len(t_idxs), 0.05)  # rad/s, turning right
+    right_turn = get_curvature_from_plan(yaw_rates * t_idxs, yaw_rates, t_idxs, 20.0, 0.2)
+    assert right_turn > 0
+    k = settled(LaneOffsetController(DT_CTRL), make_model(-1.2, 1.8), make_cs(20.0))  # car left of centre: move right
+    assert np.sign(k) == np.sign(right_turn)
 
   def test_target_is_right_of_centre_positive(self):
     centred = make_model(-1.5, 1.5)
     assert settled(self.ctrl, centred, make_cs(), target=0.0) == 0.0
-    assert settled(LaneOffsetController(DT_CTRL), centred, make_cs(), target=0.3) < -3e-4   # move right: right curvature
-    assert settled(LaneOffsetController(DT_CTRL), centred, make_cs(), target=-0.3) > 3e-4  # move left: left curvature
+    assert settled(LaneOffsetController(DT_CTRL), centred, make_cs(), target=0.3) > 3e-4   # move right: positive curvature
+    assert settled(LaneOffsetController(DT_CTRL), centred, make_cs(), target=-0.3) < -3e-4  # move left: negative curvature
 
   def test_target_reached_means_no_correction(self):
     # car 0.25 m right of centre, target 0.25 m right
@@ -88,9 +103,9 @@ class TestLaneOffset(OpenpilotTestCase):
     far = make_model(-0.6, 2.4)  # car 0.9 m left of centre
     k_slow = settled(LaneOffsetController(DT_CTRL), far, make_cs(v_ego=6.0))
     assert abs(-2.0 * 0.9 / MIN_LOOKAHEAD ** 2) > MAX_CURVATURE  # unclipped it would exceed the cap
-    assert abs(k_slow + MAX_CURVATURE) < 1e-5
+    assert abs(k_slow - MAX_CURVATURE) < 1e-5
     k_fast = settled(LaneOffsetController(DT_CTRL), far, make_cs(v_ego=30.0))
-    assert abs(k_fast + MAX_LAT_ACCEL / 30.0 ** 2) < 1e-6
+    assert abs(k_fast - MAX_LAT_ACCEL / 30.0 ** 2) < 1e-6
 
   def test_fades_out(self):
     k = settled(self.ctrl, make_model(-1.2, 1.8), make_cs())

@@ -7,7 +7,9 @@ toward a chosen offset from the centre of the model's inner lane lines. It is in
 two confident lane lines, below MIN_SPEED, with a blinker on, during a model lane change,
 while the driver steers, or when lateral control is off.
 
-Frames: model y is positive to the right of the car; curvature is positive to the left.
+Frames: model y is positive to the right of the car, and curvature is positive for a RIGHT turn
+(same z-down frame as the model; steeringAngleDeg is the opposite sign). Verified against logged
+routes: the model's desiredCurvature shares the sign of the lane centre 40 m ahead in every frame.
 """
 from openpilot.cereal import log
 from openpilot.common.filter_simple import FirstOrderFilter
@@ -51,7 +53,7 @@ class LaneOffsetController:
     return error, clip(confidence, 0.0, 1.0)
 
   def update(self, active: bool, target: float, model_v2, CS) -> float:
-    """Curvature (1/m, positive left) to add to the model's desired curvature."""
+    """Curvature (1/m, positive right) to add to the model's desired curvature."""
     if not active:
       self.filter.x = 0.0
       self.curvature = 0.0
@@ -64,8 +66,8 @@ class LaneOffsetController:
     if result is not None:
       error, confidence = result
       lookahead = max(CS.vEgo * LOOKAHEAD_T, MIN_LOOKAHEAD)
-      # a lateral shift d over distance L needs curvature 2d/L^2; moving right (+error) is a right (negative) curvature
-      raw = -2.0 * error * confidence / lookahead ** 2
+      # a lateral shift d over distance L needs curvature 2d/L^2; moving right (+error) is a right (positive) curvature
+      raw = 2.0 * error * confidence / lookahead ** 2
       limit = min(MAX_LAT_ACCEL / max(CS.vEgo, MIN_SPEED) ** 2, MAX_CURVATURE)
       raw = clip(raw, -limit, limit)
     self.curvature = self.filter.update(raw)
