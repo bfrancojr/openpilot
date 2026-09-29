@@ -8,8 +8,12 @@ device: **comma 4 (mici)**. Dates are 2026. Commit hashes refer to the two forks
 
 | Branch (both forks) | Purpose | State |
 |---|---|---|
-| `alka-toyota` | Always-on lateral + lane offset correction. Frozen as the device's installation branch. | openpilot `93bfcc38a`, opendbc `e385d87c` |
-| `alka-toyota-long` | Everything above plus openpilot longitudinal on TSS-P (DSU unplugged or smartDSU). Where new work lands. | openpilot `513f4da4b`, opendbc `5ea42503` and later |
+| `alka-toyota-long` | Always-on lateral, lane offset correction, driver monitoring settings, openpilot longitudinal on TSS-P (DSU unplugged or smartDSU). The device's branch; where new work lands. | openpilot `3ca849d1d`, opendbc `5ea42503` and later |
+| `alka-toyota` | Kept identical to `alka-toyota-long` once that is validated on the car. | same as `alka-toyota-long` |
+
+`alka-toyota` was frozen at openpilot `93bfcc38a` / opendbc `e385d87c` (lateral only) until 2026-09-29, when both forks' branches
+were reset to `alka-toyota-long` after the owner had driven it for thousands of miles without problems. Sync by resetting
+`alka-toyota` to `alka-toyota-long` (a fast-forward when nothing landed on `alka-toyota` directly), not by merging.
 
 Install/switch: `installer.comma.ai/bfrancojr/<branch>`, or Settings → Software → target branch. The device builds on the
 first boot after a change (no prebuilt marker); Params keys are compiled into the params library, so a new key needs that build.
@@ -17,7 +21,8 @@ first boot after a change (no prebuilt marker); Params keys are compiled into th
 ## 1. Always-on lateral (steer whenever the cruise main switch is on)
 
 Port of dragonpilot's ALKA idea onto upstream master (e3def3769, 2026-09-03). Decisions the owner made: the panda gates on the
-stock ACC main switch (not a blanket flag); driver monitoring treats lateral-active as engaged; Toyota TSS-P/TSS2 non-SecOC only.
+stock ACC main switch (not a blanket flag); driver monitoring treats lateral-active as engaged (configurable since 2026-09-29,
+see section 3); Toyota TSS-P/TSS2 non-SecOC only.
 
 - Panda (opendbc safety): `ALT_EXP_ALWAYS_ON_LATERAL` (32) and `ALT_EXP_ALWAYS_ON_LATERAL_WHILE_BRAKING` (64);
   `get_lateral_allowed() = controls_allowed || (flag && acc_main_on && (!brake_pressed || while_braking))` in every steering check.
@@ -26,7 +31,7 @@ stock ACC main switch (not a blanket flag); driver monitoring treats lateral-act
 - openpilot: `card.py` decides once at start from the `AlwaysOnLateral` / `AlwaysOnLateralWhileBraking` params and records the
   alternative-experience bits + safety param in CarParams, so panda and selfdrived cannot disagree. `selfdriveState.lateralActive`
   (capnp @14) = engaged-active OR (main on AND no NO_ENTRY/SOFT_DISABLE/IMMEDIATE_DISABLE event; `pedalPressed` exempt when
-  steer-while-braking). controlsd steers on it, DM counts it as engaged, UI shows a blue path (`UIStatus.LATERAL`).
+  steer-while-braking). controlsd steers on it, DM counts it as engaged (by default), UI shows a blue path (`UIStatus.LATERAL`).
 - Toggles restart the car processes through `OnroadCycleRequested` (a few seconds, no reboot); grayed out while engaged.
 - **Lesson (2026-09-04):** the first on-car build crashed `card` ("openpilot Unavailable / Waiting to start"): `safetyParam |=
   ToyotaSafetyFlags.ACC_MAIN_ON` yields an IntFlag object and pycapnp refuses it. Use `.value`. Any code that writes CarParams
@@ -70,7 +75,36 @@ detected the 6.4° pitch / 0.7° yaw change and recalibrated (pitch −0.062 →
 mounting and the correction off, openpilot centers the car (−0.03 m over 25 min). The original complaint is most likely a
 mounting artifact; the correction is optional.
 
-## 3. Stop-and-go: openpilot longitudinal on a TSS-P car
+## 3. Driver monitoring settings
+
+**Complaint (2026-09-29):** attention alerts while looking at the road, with a hand resting on the armrest next to the phone the
+owner uses as a GPS (the car has none), and then a lockout ("Too Distracted, N minutes left") that also stops always-on lateral.
+Getting out of a lockout meant restarting the car while driving, which the owner judged more distracting and more dangerous
+than the alert itself.
+
+**Most likely cause, not confirmed from a log:** the DM model's phone detector (`phoneProb` > `_PHONE_THRESH` 0.5 flags
+`distractedTypes.phone`), which cannot tell a mounted phone from one in the hand. To confirm, read
+`driverMonitoringState.visionPolicyState.distractedTypes` (pose / eye / phone) around the alert in the route's rlog.
+
+**How upstream escalates (`selfdrive/monitoring/policy.py`, `selfdrive/selfdrived/events.py`):** the red alert
+(`driverDistracted3` / `driverUnresponsive3`) is a PERMANENT alert and does not disengage by itself. Red unanswered for 5 s sets
+`noResponseForceDecel` (controlsd slows the car). A second red alert in a drive, or one unanswered red, starts the lockout:
+1 / 5 / 15 / 30 min for successive lockouts, cleared on ignition. `tooDistracted` is NO_ENTRY, so it also blocks always-on
+lateral (`always_on_lateral_allowed` treats any NO_ENTRY as blocking).
+
+**Settings added (all live-reloaded by dmonitoringd every 2 s, no restart):**
+
+| Param | Values | Effect |
+|---|---|---|
+| `DriverMonitoringMode` (int, default 2) | 0 off, 1 engaged only, 2 engaged + always-on lateral | 1 stops counting `lateralActive` as engaged. 0 skips alert and lockout logic, clears an active lockout, suppresses the uncertain-camera offroad alert; the DM icon is hidden |
+| `DMIgnorePhone` (bool) | | phone no longer counts as a distraction; head pose and eye closure still do |
+| `DMDisableLockout` (bool) | | alerts including red and the no-response slowdown still happen; no lockout starts and an active one is cleared. The red / no-response counts restart when they would have locked out, so turning the lockout back on does not lock out immediately |
+
+`AlwaysOnDM` is unchanged and still applies in mode 1 (monitors while disengaged, never reaching red). Owner's intended setup:
+`DMIgnorePhone` and `DMDisableLockout` on, mode 2 or 1. Upstream's note in `policy.py` warns that forks which disable or weaken
+DM risk being banned from comma's servers.
+
+## 4. Stop-and-go: openpilot longitudinal on a TSS-P car
 
 **Why the car has none:** on TSS-P the DSU (Driver Support Unit) sends `ACC_CONTROL` (0x343) and the stock radar cruise is
 not full-speed-range (cannot be set below 19 mph, drops out at low speed). Logged CarParams on the car:
@@ -110,7 +144,7 @@ messages are still in `TOYOTA_COMMON_LONG_TX_MSGS`.
 `flags & 2`; no `relayMalfunction` / `controlsMismatch` events; engages below 19 mph; holds a stop and resumes; then the
 longitudinal measurements below.
 
-## 4. Longitudinal quality review (vs. the 2020 Reddit thread "2018 Sienna questions")
+## 5. Longitudinal quality review (vs. the 2020 Reddit thread "2018 Sienna questions")
 
 redbeards (2020, comma two, openpilot 0.7/0.8): openpilot floors the gas on a set-speed bump, brakes instead of coasting on a
 set-speed drop, stock ACC felt better but cuts out below 27 mph. Status on this base:
@@ -128,7 +162,7 @@ tuned by comma on DSU-unplugged Corolla/RAV4H/ES years ago and not exercised ups
 fraction via `longitudinalPlan.allowThrottle`, stop/resume timing) and only then tune `kiV`, actuator delay, `ACCEL_MAX` or
 personality. Do not tune blind.
 
-## 5. How the measurements were made (reproducible)
+## 6. How the measurements were made (reproducible)
 
 - Logs: `ssh comma`, `/data/media/0/realdata/<route>--<seg>/rlog.zst`; copy with `tar` over ssh; read with
   `openpilot.tools.lib.logreader.LogReader([paths])`.
@@ -141,10 +175,12 @@ personality. Do not tune blind.
   `openpilot/selfdrive/test/process_replay/process_replay.py`; on macOS the script needs an `if __name__ == "__main__":` guard.
 - Calibration timeline: `extrinsicsCalibration.calStatus/rpyCalib/validBlocks` over time (recalibrating = mount-change detector).
 
-## 6. Open items
+## 7. Open items
 
 - Lane offset correction: unmeasured with the correct sign; optional now that the car centers after the remount.
 - sDSU: 0x2FF emission unverified; first drive pending.
 - Longitudinal tuning for the Sienna: pending measurement.
 - Other TSS-P cars with a stop timer: deliberately left on stock longitudinal (#3076 handling not restored).
+- Driver monitoring settings: unit tests in `test_monitoring.py` written but not yet run; the phone detector as the cause of
+  the armrest alerts is unconfirmed until read from a route; settings screens not yet checked on the device.
 - GitHub issues are disabled on both forks; findings live here and in commit messages.
