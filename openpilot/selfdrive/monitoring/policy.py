@@ -14,6 +14,11 @@ from openpilot.common.transformations.camera import DEVICE_CAMERAS
 AlertLevel = log.DriverMonitoringState.AlertLevel
 MonitoringPolicy = log.DriverMonitoringState.MonitoringPolicy
 
+# DriverMonitoringMode param: when driver monitoring watches the driver
+DM_MODE_OFF = 0                  # never
+DM_MODE_ENGAGED = 1              # only while openpilot is engaged
+DM_MODE_ENGAGED_AND_LATERAL = 2  # while engaged or steering with always-on lateral
+
 def to_percent(v):
   return int(min(max(v * 100., 0.), 100.))
 
@@ -128,7 +133,7 @@ def face_orientation_from_model(orient_model, pos_model, rpy_calib):
 
 
 class DriverMonitoring:
-  def __init__(self, rhd_saved=False, settings=None, always_on=False):
+  def __init__(self, rhd_saved=False, settings=None, always_on=False, mode=DM_MODE_ENGAGED_AND_LATERAL):
     # init policy settings
     self.settings = settings if settings is not None else DRIVER_MONITOR_SETTINGS()
 
@@ -141,6 +146,7 @@ class DriverMonitoring:
 
     self.alert_level = AlertLevel.none
     self.always_on = always_on
+    self.mode = mode
     self.distracted_types = defaultdict(bool)
     self.driver_distracted = False
     self.driver_distraction_filter = FirstOrderFilter(0., self.settings._DISTRACTED_FILTER_TS, DT_DMON)
@@ -290,7 +296,7 @@ class DriverMonitoring:
     self.pose.calibrated = self.pose.pitch_offsetter.filtered_stat.n >= self.settings._POSE_OFFSET_MIN_COUNT and \
                            self.pose.yaw_offsetter.filtered_stat.n >= self.settings._POSE_OFFSET_MIN_COUNT
 
-    if self.face_detected and not self.driver_distracted:
+    if self.face_detected and not self.driver_distracted and self.mode != DM_MODE_OFF:
       dcam_uncertain = self.model_std_max > self.settings._DCAM_UNCERTAIN_ALERT_THRESHOLD
       if dcam_uncertain and not lowspeed:
         self.dcam_uncertain_cnt += 1
@@ -310,6 +316,17 @@ class DriverMonitoring:
   def _update_events(self, driver_engaged, op_engaged, lowspeed, wrong_gear):
     self.alert_level = AlertLevel.none
     self.driver_interacting = driver_engaged
+
+    if self.mode == DM_MODE_OFF:
+      # no alerts and no lockout, including one carried over from before the mode was switched off
+      self.lockout_active = False
+      self.lockout_time_elapsed = 0
+      self.alert_3_cnt = 0
+      self.cnt_since_alert_3 = 0
+      self.no_response_cnt = 0
+      self.dcam_uncertain_cnt = 0
+      self._reset_awareness()
+      return
 
     if self.alert_3_cnt >= self.settings._MAX_ALERT_3 or self.no_response_cnt >= self.settings._MAX_NO_RESPONSE:
       if not self.lockout_active:
@@ -392,8 +409,8 @@ class DriverMonitoring:
     dm.alert3Count = self.alert_3_cnt
     dm.noResponseCount = self.no_response_cnt
     dm.noResponseForceDecel = self.alert_level == AlertLevel.three and self.cnt_since_alert_3 >= self.no_response_timeout
-    dm.alwaysOn = self.always_on
-    dm.alwaysOnLockout = self.always_on and self.awareness <= self.threshold_alert_2
+    dm.alwaysOn = self.always_on and self.mode != DM_MODE_OFF
+    dm.alwaysOnLockout = dm.alwaysOn and self.awareness <= self.threshold_alert_2
     dm.alertLevel = self.alert_level
     dm.activePolicy = self.active_policy
     dm.isRHD = self.wheel_on_right
@@ -435,7 +452,7 @@ class DriverMonitoring:
       rpyCalib = [0., 0., 0.]
     else:
       car_speed = sm['carState'].vEgo
-      enabled = sm['selfdriveState'].enabled or sm['selfdriveState'].lateralActive
+      enabled = sm['selfdriveState'].enabled or (self.mode == DM_MODE_ENGAGED_AND_LATERAL and sm['selfdriveState'].lateralActive)
       wrong_gear = sm['carState'].gearShifter not in (car.CarState.GearShifter.drive, car.CarState.GearShifter.low)
       lowspeed = car_speed < self.settings._ALERT_MIN_SPEED
       driver_engaged = sm['carState'].steeringPressed or sm['carState'].gasPressed

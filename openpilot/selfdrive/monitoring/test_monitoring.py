@@ -1,7 +1,7 @@
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.cereal import log
 from openpilot.common.realtime import DT_DMON
-from openpilot.selfdrive.monitoring.policy import DriverMonitoring, DRIVER_MONITOR_SETTINGS
+from openpilot.selfdrive.monitoring.policy import DriverMonitoring, DRIVER_MONITOR_SETTINGS, DM_MODE_OFF
 
 EventName = log.OnroadEvent.EventName
 dm_settings = DRIVER_MONITOR_SETTINGS()
@@ -48,8 +48,8 @@ always_true = [True] * int(TEST_TIMESPAN / DT_DMON)
 always_false = [False] * int(TEST_TIMESPAN / DT_DMON)
 
 class TestMonitoring(OpenpilotTestCase):
-  def _run_seq(self, msgs, interaction, engaged, lowspeed):
-    DM = DriverMonitoring()
+  def _run_seq(self, msgs, interaction, engaged, lowspeed, DM=None):
+    DM = DM if DM is not None else DriverMonitoring()
     alert_lvls = []
     for idx in range(len(msgs)):
       DM._update_states(msgs[idx], [0, 0, 0], 0, engaged[idx], lowspeed[idx])
@@ -88,6 +88,23 @@ class TestMonitoring(OpenpilotTestCase):
     assert d_status.lockout_active
     assert d_status.lockout_time_elapsed > 0
     assert d_status.lockout_count >= 1
+
+  # monitoring off: engaged and distracted the whole time, never alerts or locks out
+  def test_off_never_alerts(self):
+    alert_lvls, d_status = self._run_seq(always_distracted, always_false, always_true, always_false,
+                                         DM=DriverMonitoring(mode=DM_MODE_OFF))
+    assert all(a == 0 for a in alert_lvls)
+    assert not d_status.lockout_active
+    assert d_status.get_state_packet().driverMonitoringState.alertLevel == 0
+
+  # switching monitoring off releases an active lockout
+  def test_off_clears_lockout(self):
+    _, d_status = self._run_seq(always_distracted, always_false, always_true, always_false)
+    assert d_status.lockout_active
+    d_status.mode = DM_MODE_OFF
+    self._run_seq(always_distracted[:1], always_false[:1], always_true[:1], always_false[:1], DM=d_status)
+    assert not d_status.lockout_active
+    assert d_status.alert_level == 0
 
   # no face -> wheeltouch red, sustained past the no-response timeout -> unavailability response + lockout
   def test_invisible_lockout(self):
