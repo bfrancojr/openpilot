@@ -133,7 +133,8 @@ def face_orientation_from_model(orient_model, pos_model, rpy_calib):
 
 
 class DriverMonitoring:
-  def __init__(self, rhd_saved=False, settings=None, always_on=False, mode=DM_MODE_ENGAGED_AND_LATERAL, ignore_phone=False):
+  def __init__(self, rhd_saved=False, settings=None, always_on=False, mode=DM_MODE_ENGAGED_AND_LATERAL, ignore_phone=False,
+               disable_lockout=False):
     # init policy settings
     self.settings = settings if settings is not None else DRIVER_MONITOR_SETTINGS()
 
@@ -148,6 +149,7 @@ class DriverMonitoring:
     self.always_on = always_on
     self.mode = mode
     self.ignore_phone = ignore_phone  # e.g. a phone mounted as a GPS near the driver
+    self.disable_lockout = disable_lockout
     self.distracted_types = defaultdict(bool)
     self.driver_distracted = False
     self.driver_distraction_filter = FirstOrderFilter(0., self.settings._DISTRACTED_FILTER_TS, DT_DMON)
@@ -329,7 +331,16 @@ class DriverMonitoring:
       self._reset_awareness()
       return
 
-    if self.alert_3_cnt >= self.settings._MAX_ALERT_3 or self.no_response_cnt >= self.settings._MAX_NO_RESPONSE:
+    lockout_reached = self.alert_3_cnt >= self.settings._MAX_ALERT_3 or self.no_response_cnt >= self.settings._MAX_NO_RESPONSE
+    if self.disable_lockout:
+      # alerts and the no-response slowdown still happen, but engaging is never blocked. Counts restart
+      # instead of piling up, so enabling the lockout again doesn't lock out immediately
+      if lockout_reached:
+        self.alert_3_cnt = 0
+        self.no_response_cnt = 0
+      self.lockout_active = False
+      self.lockout_time_elapsed = 0
+    elif lockout_reached:
       if not self.lockout_active:
         self.lockout_count += 1
         self.lockout_duration = self.settings._LOCKOUT_TIMES[min(self.lockout_count - 1, len(self.settings._LOCKOUT_TIMES) - 1)]

@@ -107,6 +107,18 @@ class TestMonitoring(OpenpilotTestCase):
     assert not d_status.lockout_active
     assert d_status.alert_level == 0
 
+  # lockout disabled: still reaches red, but never locks out, and enabling it again doesn't lock out at once
+  def test_disable_lockout(self):
+    DM = DriverMonitoring(disable_lockout=True)
+    lockout_count = DM.lockout_count
+    alert_lvls, d_status = self._run_seq(always_distracted, always_false, always_true, always_false, DM=DM)
+    assert alert_lvls[int(DISTRACTED_SECONDS_TO_RED / DT_DMON)] == 3
+    assert not d_status.lockout_active
+    assert d_status.lockout_count == lockout_count
+    d_status.disable_lockout = False
+    self._run_seq(always_attentive[:1], always_false[:1], always_true[:1], always_false[:1], DM=d_status)
+    assert not d_status.lockout_active
+
   # phone visible, eyes on the road: distracted by default, attentive with phone detection ignored
   def test_ignore_phone(self):
     always_phone = [msg_PHONE] * int(TEST_TIMESPAN / DT_DMON)

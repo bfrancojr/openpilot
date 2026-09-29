@@ -42,6 +42,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"DriverLockoutCount", {CLEAR_ON_MANAGER_START | CLEAR_ON_IGNITION_ON, INT, "0"}},
     {"DriverMonitoringMode", {PERSISTENT, INT, "2"}},
     {"DMIgnorePhone", {PERSISTENT, BOOL}},
+    {"DMDisableLockout", {PERSISTENT, BOOL}},
     {"AlphaLongitudinalEnabled", {PERSISTENT | DEVELOPMENT_ONLY, BOOL}},
     {"ExperimentalMode", {PERSISTENT, BOOL}},
     {"ExperimentalModeConfirmed", {PERSISTENT, BOOL}},
