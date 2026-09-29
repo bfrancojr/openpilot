@@ -12,7 +12,7 @@ DISTRACTED_SECONDS_TO_RED = dm_settings._VISION_POLICY_ALERT_3_TIMEOUT + 1
 INVISIBLE_SECONDS_TO_ORANGE = dm_settings._WHEELTOUCH_POLICY_ALERT_2_TIMEOUT + 1
 INVISIBLE_SECONDS_TO_RED = dm_settings._WHEELTOUCH_POLICY_ALERT_3_TIMEOUT + 1
 
-def make_msg(face_detected, distracted=False, model_uncertain=False):
+def make_msg(face_detected, distracted=False, model_uncertain=False, phone=False):
   ds = log.DriverStateV2.new_message()
   ds.leftDriverData.faceOrientation = [0., 0., 0.]
   ds.leftDriverData.facePosition = [0., 0.]
@@ -24,7 +24,7 @@ def make_msg(face_detected, distracted=False, model_uncertain=False):
   ds.leftDriverData.faceOrientationStd = [1.*model_uncertain, 1.*model_uncertain, 1.*model_uncertain]
   ds.leftDriverData.facePositionStd = [1.*model_uncertain, 1.*model_uncertain]
   # TODO: test both separately when e2e is used
-  ds.leftDriverData.phoneProb = 0.
+  ds.leftDriverData.phoneProb = 1. * phone
   return ds
 
 
@@ -33,6 +33,7 @@ msg_NO_FACE_DETECTED = make_msg(False)
 msg_ATTENTIVE = make_msg(True)
 msg_DISTRACTED = make_msg(True, distracted=True)
 msg_ATTENTIVE_UNCERTAIN = make_msg(True, model_uncertain=True)
+msg_PHONE = make_msg(True, phone=True)
 msg_DISTRACTED_UNCERTAIN = make_msg(True, distracted=True, model_uncertain=True)
 msg_DISTRACTED_BUT_SOMEHOW_UNCERTAIN = make_msg(True, distracted=True, model_uncertain=dm_settings._HI_STD_THRESHOLD*1.5)
 
@@ -105,6 +106,16 @@ class TestMonitoring(OpenpilotTestCase):
     self._run_seq(always_distracted[:1], always_false[:1], always_true[:1], always_false[:1], DM=d_status)
     assert not d_status.lockout_active
     assert d_status.alert_level == 0
+
+  # phone visible, eyes on the road: distracted by default, attentive with phone detection ignored
+  def test_ignore_phone(self):
+    always_phone = [msg_PHONE] * int(TEST_TIMESPAN / DT_DMON)
+    alert_lvls, _ = self._run_seq(always_phone, always_false, always_true, always_false)
+    assert alert_lvls[int(DISTRACTED_SECONDS_TO_RED / DT_DMON)] == 3
+    alert_lvls, d_status = self._run_seq(always_phone, always_false, always_true, always_false,
+                                         DM=DriverMonitoring(ignore_phone=True))
+    assert all(a == 0 for a in alert_lvls)
+    assert not d_status.distracted_types['phone']
 
   # no face -> wheeltouch red, sustained past the no-response timeout -> unavailability response + lockout
   def test_invisible_lockout(self):

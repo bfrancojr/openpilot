@@ -133,7 +133,7 @@ def face_orientation_from_model(orient_model, pos_model, rpy_calib):
 
 
 class DriverMonitoring:
-  def __init__(self, rhd_saved=False, settings=None, always_on=False, mode=DM_MODE_ENGAGED_AND_LATERAL):
+  def __init__(self, rhd_saved=False, settings=None, always_on=False, mode=DM_MODE_ENGAGED_AND_LATERAL, ignore_phone=False):
     # init policy settings
     self.settings = settings if settings is not None else DRIVER_MONITOR_SETTINGS()
 
@@ -147,6 +147,7 @@ class DriverMonitoring:
     self.alert_level = AlertLevel.none
     self.always_on = always_on
     self.mode = mode
+    self.ignore_phone = ignore_phone  # e.g. a phone mounted as a GPS near the driver
     self.distracted_types = defaultdict(bool)
     self.driver_distracted = False
     self.driver_distraction_filter = FirstOrderFilter(0., self.settings._DISTRACTED_FILTER_TS, DT_DMON)
@@ -245,7 +246,7 @@ class DriverMonitoring:
 
     self.distracted_types['pose'] = bool((pitch_error > pitch_threshold) or (yaw_error > yaw_threshold))
     self.distracted_types['eye'] = bool((self.blink.left + self.blink.right)*0.5 > self.settings._BLINK_THRESHOLD)
-    self.distracted_types['phone'] = bool(self.phone_prob > self.settings._PHONE_THRESH)
+    self.distracted_types['phone'] = bool(not self.ignore_phone and self.phone_prob > self.settings._PHONE_THRESH)
 
   def _update_states(self, driver_state, cal_rpy, car_speed, op_engaged, lowspeed, demo_mode=False, steering_angle_deg=0.):
     rhd_pred = driver_state.wheelOnRightProb
