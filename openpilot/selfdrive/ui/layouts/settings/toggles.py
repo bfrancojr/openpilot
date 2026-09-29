@@ -34,6 +34,10 @@ DESCRIPTIONS = {
     "Always-On Lateral is steering."
   ),
   "AlwaysOnDM": tr_noop("Enable driver monitoring even when openpilot is not engaged."),
+  "DMIgnorePhone": tr_noop(
+    "Don't treat a phone in view of the cabin camera as a distraction, for a phone mounted as a GPS near the driver. " +
+    "Looking away from the road and closed eyes are still detected."
+  ),
   "AlwaysOnLateral": tr_noop(
     "Steer whenever the car's cruise control main switch is on, without setting a speed. Toyota only. " +
     "Driver monitoring also watches while steering, unless Driver Monitoring is set to Engaged or Off."
@@ -88,6 +92,12 @@ class TogglesLayout(Widget):
       "AlwaysOnDM": (
         lambda: tr("Always-On Driver Monitoring"),
         DESCRIPTIONS["AlwaysOnDM"],
+        "monitoring.png",
+        False,
+      ),
+      "DMIgnorePhone": (
+        lambda: tr("Ignore Phone Detection"),
+        DESCRIPTIONS["DMIgnorePhone"],
         "monitoring.png",
         False,
       ),
