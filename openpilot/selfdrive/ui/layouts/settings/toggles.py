@@ -38,6 +38,10 @@ DESCRIPTIONS = {
     "Don't treat a phone in view of the cabin camera as a distraction, for a phone mounted as a GPS near the driver. " +
     "Looking away from the road and closed eyes are still detected."
   ),
+  "DMDisableLockout": tr_noop(
+    "Don't block engaging for minutes after repeated distraction alerts. The alerts, including the red one, " +
+    "and the slowdown when you don't respond still happen."
+  ),
   "AlwaysOnLateral": tr_noop(
     "Steer whenever the car's cruise control main switch is on, without setting a speed. Toyota only. " +
     "Driver monitoring also watches while steering, unless Driver Monitoring is set to Engaged or Off."
@@ -98,6 +102,12 @@ class TogglesLayout(Widget):
       "DMIgnorePhone": (
         lambda: tr("Ignore Phone Detection"),
         DESCRIPTIONS["DMIgnorePhone"],
+        "monitoring.png",
+        False,
+      ),
+      "DMDisableLockout": (
+        lambda: tr("Disable Distraction Lockout"),
+        DESCRIPTIONS["DMDisableLockout"],
         "monitoring.png",
         False,
       ),

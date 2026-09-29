@@ -71,6 +71,7 @@ class TogglesLayoutMici(NavScroller):
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM")
     dm_ignore_phone_toggle = BigParamControl("ignore phone detection", "DMIgnorePhone")
+    dm_disable_lockout_toggle = BigParamControl("disable distraction lockout", "DMDisableLockout")
     # option index is the DriverMonitoringMode value
     dm_mode_toggle = BigMultiParamToggle("driver monitoring", "DriverMonitoringMode",
                                          ["off", "engaged only", "engaged + always-on"])
@@ -91,6 +92,7 @@ class TogglesLayoutMici(NavScroller):
       dm_mode_toggle,
       always_on_dm_toggle,
       dm_ignore_phone_toggle,
+      dm_disable_lockout_toggle,
       always_on_lateral_toggle,
       always_on_lateral_braking_toggle,
       lane_offset_toggle,
@@ -107,6 +109,7 @@ class TogglesLayoutMici(NavScroller):
       ("IsLdwEnabled", ldw_toggle),
       ("AlwaysOnDM", always_on_dm_toggle),
       ("DMIgnorePhone", dm_ignore_phone_toggle),
+      ("DMDisableLockout", dm_disable_lockout_toggle),
       ("AlwaysOnLateral", always_on_lateral_toggle),
       ("AlwaysOnLateralWhileBraking", always_on_lateral_braking_toggle),
       ("LaneOffsetCorrection", lane_offset_toggle),
