@@ -70,6 +70,9 @@ class TogglesLayoutMici(NavScroller):
     is_metric_toggle = BigParamControl("use metric units", "IsMetric")
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM")
+    # option index is the DriverMonitoringMode value
+    dm_mode_toggle = BigMultiParamToggle("driver monitoring", "DriverMonitoringMode",
+                                         ["off", "engaged only", "engaged + always-on"])
     always_on_lateral_toggle = BigParamControl("always-on lateral (toyota)", "AlwaysOnLateral", toggle_callback=restart_needed_callback)
     always_on_lateral_braking_toggle = BigParamControl("always-on lateral: steer while braking", "AlwaysOnLateralWhileBraking",
                                                        toggle_callback=restart_needed_callback)
@@ -84,6 +87,7 @@ class TogglesLayoutMici(NavScroller):
       self._experimental_btn,
       is_metric_toggle,
       ldw_toggle,
+      dm_mode_toggle,
       always_on_dm_toggle,
       always_on_lateral_toggle,
       always_on_lateral_braking_toggle,

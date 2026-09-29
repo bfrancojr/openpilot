@@ -28,10 +28,15 @@ DESCRIPTIONS = {
     "Receive alerts to steer back into the lane when your vehicle drifts over a detected lane line " +
     "without a turn signal activated while driving over 31 mph (50 km/h)."
   ),
+  "DriverMonitoringMode": tr_noop(
+    "When driver monitoring watches the driver. Off disables all attention alerts and lockouts: you are fully responsible " +
+    "for staying attentive. Engaged monitors only while openpilot is engaged. + Always-On also monitors while " +
+    "Always-On Lateral is steering."
+  ),
   "AlwaysOnDM": tr_noop("Enable driver monitoring even when openpilot is not engaged."),
   "AlwaysOnLateral": tr_noop(
     "Steer whenever the car's cruise control main switch is on, without setting a speed. Toyota only. " +
-    "Driver monitoring stays active while steering."
+    "Driver monitoring also watches while steering, unless Driver Monitoring is set to Engaged or Off."
   ),
   "AlwaysOnLateralWhileBraking": tr_noop(
     "Keep steering while the brake is pressed. When off, Always-On Lateral pauses while braking and resumes " +
@@ -134,6 +139,17 @@ class TogglesLayout(Widget):
       icon="speed_limit.png"
     )
 
+    # button index is the DriverMonitoringMode value
+    self._dm_mode_setting = multiple_button_item(
+      lambda: tr("Driver Monitoring"),
+      lambda: tr(DESCRIPTIONS["DriverMonitoringMode"]),
+      buttons=[lambda: tr("Off"), lambda: tr("Engaged"), lambda: tr("+ Always-On")],
+      button_width=255,
+      callback=self._set_dm_mode,
+      selected_index=self._params.get("DriverMonitoringMode", return_default=True),
+      icon="monitoring.png"
+    )
+
     lane_offset_cm = self._params.get("LaneOffsetCm") or 0
     self._lane_offset_setting = multiple_button_item(
       lambda: tr("Lane Offset"),
@@ -174,6 +190,8 @@ class TogglesLayout(Widget):
 
       self._toggles[param] = toggle
 
+      if param == "IsLdwEnabled":
+        self._toggles["DriverMonitoringMode"] = self._dm_mode_setting
       # insert longitudinal personality after NDOG toggle
       if param == "DisengageOnAccelerator":
         self._toggles["LongitudinalPersonality"] = self._long_personality_setting
@@ -288,6 +306,9 @@ class TogglesLayout(Widget):
 
   def _set_longitudinal_personality(self, button_index: int):
     self._params.put("LongitudinalPersonality", button_index, block=True)
+
+  def _set_dm_mode(self, button_index: int):
+    self._params.put("DriverMonitoringMode", button_index, block=True)
 
   def _set_lane_offset(self, button_index: int):
     self._params.put("LaneOffsetCm", LANE_OFFSET_CM[button_index], block=True)
