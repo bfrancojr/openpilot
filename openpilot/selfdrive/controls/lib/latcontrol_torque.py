@@ -30,6 +30,9 @@ LP_FILTER_CUTOFF_HZ = 1.2
 JERK_LOOKAHEAD_SECONDS = 0.19
 JERK_GAIN = 0.3
 LAT_ACCEL_REQUEST_BUFFER_SECONDS = 1.0
+# SteerFrictionBoost: reach full friction compensation at a smaller error so the torque breaks
+# the EPS's on-centre stiction sooner (measured stick-slip weave on a TSS-P Sienna, 2026-09-30)
+FRICTION_THRESHOLD_BOOSTED = 0.1  # m/s^2, vs FRICTION_THRESHOLD
 VERSION = 1
 
 class LatControlTorque(LatControl):
@@ -41,6 +44,7 @@ class LatControlTorque(LatControl):
     self.pid = PIDController([INTERP_SPEEDS, KP_INTERP], KI, rate=1/self.dt)
     self.update_limits()
     self.steering_angle_deadzone_deg = self.torque_params.steeringAngleDeadzoneDeg
+    self.friction_threshold = FRICTION_THRESHOLD
     self.lat_accel_request_buffer_len = int(LAT_ACCEL_REQUEST_BUFFER_SECONDS / self.dt)
     self.lat_accel_request_buffer = deque([0.] * self.lat_accel_request_buffer_len , maxlen=self.lat_accel_request_buffer_len)
     self.lookahead_frames = int(JERK_LOOKAHEAD_SECONDS / self.dt)
@@ -51,6 +55,9 @@ class LatControlTorque(LatControl):
     self.torque_params.latAccelOffset = latAccelOffset
     self.torque_params.friction = friction
     self.update_limits()
+
+  def set_friction_boost(self, enabled: bool):
+    self.friction_threshold = FRICTION_THRESHOLD_BOOSTED if enabled else FRICTION_THRESHOLD
 
   def update_limits(self):
     self.pid.set_limits(self.lateral_accel_from_torque(self.steer_max, self.torque_params),
@@ -80,7 +87,7 @@ class LatControlTorque(LatControl):
     ff = gravity_adjusted_future_lateral_accel
     # latAccelOffset corrects roll compensation bias from device roll misalignment relative to car roll
     ff -= self.torque_params.latAccelOffset
-    ff += get_friction(error + JERK_GAIN * desired_lateral_jerk, lateral_accel_deadzone, FRICTION_THRESHOLD, self.torque_params)
+    ff += get_friction(error + JERK_GAIN * desired_lateral_jerk, lateral_accel_deadzone, self.friction_threshold, self.torque_params)
 
     if not active:
       output_torque = 0.0

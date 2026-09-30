@@ -51,7 +51,6 @@ class Controls:
     self.lane_offset = LaneOffsetController(DT_CTRL)
     self.lane_offset_enabled = False
     self.lane_offset_target = 0.0
-    self.read_lane_offset_params()
 
     self.pose_calibrator = PoseCalibrator()
     self.calibrated_pose: Pose | None = None
@@ -67,15 +66,18 @@ class Controls:
       self.LaC = LatControlPID(self.CP, self.CI, DT_CTRL)
     elif self.CP.lateralTuning.which() == 'torque':
       self.LaC = LatControlTorque(self.CP, self.CI, DT_CTRL)
+    self.read_live_params()
 
-  def read_lane_offset_params(self):
+  def read_live_params(self):
     self.lane_offset_enabled = self.params.get_bool("LaneOffsetCorrection")
     self.lane_offset_target = (self.params.get("LaneOffsetCm") or 0) / 100.0  # positive = right of the lane centre
+    if isinstance(self.LaC, LatControlTorque):
+      self.LaC.set_friction_boost(self.params.get_bool("SteerFrictionBoost"))
 
   def update(self):
     self.sm.update(15)
     if self.sm.frame % int(1. / DT_CTRL) == 0:
-      self.read_lane_offset_params()
+      self.read_live_params()
     if self.sm.updated["extrinsicsCalibration"]:
       self.pose_calibrator.feed_extrinsics_calibration(self.sm['extrinsicsCalibration'])
     if self.sm.updated["deviceMotion"]:
