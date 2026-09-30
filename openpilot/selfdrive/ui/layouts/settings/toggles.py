@@ -55,6 +55,10 @@ DESCRIPTIONS = {
     "Only acts with two confident lane lines, above 11 mph (18 km/h) and with no turn signal on."
   ),
   "LaneOffsetCm": tr_noop("Where to hold the car relative to the lane centre, in cm. L is left, R is right."),
+  "SteerFrictionBoost": tr_noop(
+    "Push through steering friction sooner. Can reduce a slow side-to-side weave on straight roads caused by the " +
+    "steering sticking near centre. Only applies to cars with torque-based steering."
+  ),
   'RecordFront': tr_noop("Upload data from the cabin camera and help improve the driver monitoring algorithm."),
   "IsMetric": tr_noop("Display speed in km/h instead of mph."),
   "RecordAudio": tr_noop("Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect."),
@@ -126,6 +130,12 @@ class TogglesLayout(Widget):
       "LaneOffsetCorrection": (
         lambda: tr("Lane Offset Correction"),
         DESCRIPTIONS["LaneOffsetCorrection"],
+        "chffr_wheel.png",
+        False,
+      ),
+      "SteerFrictionBoost": (
+        lambda: tr("Steering Friction Boost"),
+        DESCRIPTIONS["SteerFrictionBoost"],
         "chffr_wheel.png",
         False,
       ),

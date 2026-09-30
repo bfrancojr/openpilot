@@ -80,6 +80,7 @@ class TogglesLayoutMici(NavScroller):
                                                        toggle_callback=restart_needed_callback)
     lane_offset_toggle = BigParamControl("lane offset correction", "LaneOffsetCorrection")
     self._lane_offset_btn = LaneOffsetButton()
+    friction_boost_toggle = BigParamControl("steering friction boost", "SteerFrictionBoost")
     record_front = BigParamControl("record & upload cabin camera", "RecordFront", toggle_callback=restart_needed_callback)
     record_mic = BigParamControl("record & upload mic audio", "RecordAudio", toggle_callback=restart_needed_callback)
     enable_openpilot = BigParamControl("enable openpilot", "OpenpilotEnabledToggle", toggle_callback=restart_needed_callback)
@@ -97,6 +98,7 @@ class TogglesLayoutMici(NavScroller):
       always_on_lateral_braking_toggle,
       lane_offset_toggle,
       self._lane_offset_btn,
+      friction_boost_toggle,
       record_front,
       record_mic,
       enable_openpilot,
@@ -113,6 +115,7 @@ class TogglesLayoutMici(NavScroller):
       ("AlwaysOnLateral", always_on_lateral_toggle),
       ("AlwaysOnLateralWhileBraking", always_on_lateral_braking_toggle),
       ("LaneOffsetCorrection", lane_offset_toggle),
+      ("SteerFrictionBoost", friction_boost_toggle),
       ("RecordFront", record_front),
       ("RecordAudio", record_mic),
       ("OpenpilotEnabledToggle", enable_openpilot),
