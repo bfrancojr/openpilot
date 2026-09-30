@@ -162,7 +162,37 @@ tuned by comma on DSU-unplugged Corolla/RAV4H/ES years ago and not exercised ups
 fraction via `longitudinalPlan.allowThrottle`, stop/resume timing) and only then tune `kiV`, actuator delay, `ACCEL_MAX` or
 personality. Do not tune blind.
 
-## 6. How the measurements were made (reproducible)
+## 6. Steering: highway weave and sharp-curve limits
+
+**Complaints (2026-09-30):** a subtle, slow weave on straight roads above ~50 mph, with the torque bar swinging left and right;
+it predates this fork and happened on the owner's comma 2 too; the owner holds the wheel to damp it. And too little steering in
+sharp curves even at low speed.
+
+**Measured (2026-09-30, 825 qlog segments, routes 0x8e–0xbd, 228 min lateral-active; rlogs for the worst episodes):**
+
+- **Stick-slip on centre.** The wheel stays still for ~1.2 s while `steeringTorqueEps` changes ~280–340 units, then jumps
+  0.3–1.5°. The gyro (`deviceMotion.angularVelocityDevice.z`, r = 0.94 with angle × v) confirms that the car's yaw changes only
+  when the wheel breaks free. This happens 11–17 times a minute at every speed. The lateral accel per jump grows with v²: p90
+  0.09 m/s² below 34 mph, 0.26 at 45–56, 0.32 at 56–78 mph.
+- **Not the driver's hands:** with |`steeringTorque`| < 6 (effectively hands-off, 5 min) the rate is the same, 12.3/min, and
+  jumps are p90 0.20 m/s². A firm hold (30–100) cuts them to 0.07. The learned delay and friction were largely learned hands-on.
+- **Why the controller lets it happen:** `get_friction` reaches its full ±friction·latAccelFactor (≈0.24 m/s²) only when
+  |error + 0.3·jerk| > `FRICTION_THRESHOLD` 0.2. At 100 Hz on the highway that is 1–12 % of the time, so it acts as extra gain,
+  not a breakaway push. The torque creeps up until the wheel breaks free and overshoots.
+- **Car specifics:** `STEER_TORQUE_SENSOR.STEER_ANGLE` (0x260) is always 0 on this Sienna, so only the 0x25 angle (0.1°)
+  is used. Learned: `lateralDelay` 0.45–0.47 s, friction 0.12–0.18 (fleet 0.14, typical Toyota), latAccelOffset
+  −0.15 to −0.32, paramsd angle offset ≈ −4°.
+- **Sharp curves are the torque ceiling.** In curves wanting > 1 m/s², the command is at the full 1500 units 91 % of the time at
+  7–16 mph, 74 % at 16–25 and 64 % at 25–34. `clip_curvature` trimmed the model > 0.002 1/m in 11 / 2 / 0 % of those frames.
+  Intersection turns also hit the 100°/s steer-rate torque cut. The model isn't the limit; 1500 is the panda/EPS limit.
+
+**Steering friction boost (param `SteerFrictionBoost`, live-reloaded every second, torque-controlled cars only):** friction
+compensation saturates at 0.1 m/s² (`FRICTION_THRESHOLD_BOOSTED`) instead of 0.2. Same magnitude, applied sooner. On the four
+worst highway rlogs, full push goes from 1–12 % to 22–41 % of frames. The raw term can step 110–170 units in 10 ms, but the
+car's torque rate limits (+15 / −25 per frame) bound reversals to ~0.2–0.3 s. Off is identical to upstream. Evaluate on a
+straight with the hands resting lightly: a firm grip damps both the weave and the fix.
+
+## 7. How the measurements were made (reproducible)
 
 - Logs: `ssh comma`, `/data/media/0/realdata/<route>--<seg>/rlog.zst`; copy with `tar` over ssh; read with
   `openpilot.tools.lib.logreader.LogReader([paths])`.
@@ -174,8 +204,12 @@ personality. Do not tune blind.
 - Real controlsd over a log: `replay_process_with_name("controlsd", lr, custom_params={...})` from
   `openpilot/selfdrive/test/process_replay/process_replay.py`; on macOS the script needs an `if __name__ == "__main__":` guard.
 - Calibration timeline: `extrinsicsCalibration.calStatus/rpyCalib/validBlocks` over time (recalibrating = mount-change detector).
+- Stick-slip: over lateral-active stretches, find runs where `carState.steeringAngleDeg` stays within 0.05° for ≥ 0.8 s. Record
+  the `steeringTorqueEps` range during the run and the angle jump just after. Check against the gyro yaw rate × vEgo.
+- Without the openpilot env: a venv with pycapnp, numpy and zstandard. `capnp.load("openpilot/cereal/log.capnp",
+  imports=["openpilot/cereal", "opendbc_repo/opendbc/car"])` then `log.Event.read_multiple_bytes(zstd-decompressed rlog)`.
 
-## 7. Open items
+## 8. Open items
 
 - Lane offset correction: unmeasured with the correct sign; optional now that the car centers after the remount.
 - sDSU: 0x2FF emission unverified; first drive pending.
@@ -183,4 +217,7 @@ personality. Do not tune blind.
 - Other TSS-P cars with a stop timer: deliberately left on stock longitudinal (#3076 handling not restored).
 - Driver monitoring settings: unit tests in `test_monitoring.py` written but not yet run; the phone detector as the cause of
   the armrest alerts is unconfirmed until read from a route; settings screens not yet checked on the device.
+- Steering friction boost: undriven. Measure stick events/min, jump size and `steeringTorqueEps` std on the same straights with
+  it off and on, hands resting lightly; watch for torque chatter. If it helps but not enough, the next knobs are the threshold
+  and an angle deadzone. The long learned delay (0.46 s) is also worth a hands-off re-learn.
 - GitHub issues are disabled on both forks; findings live here and in commit messages.
