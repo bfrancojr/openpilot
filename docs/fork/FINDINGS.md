@@ -134,15 +134,30 @@ messages are still in `TOYOTA_COMMON_LONG_TX_MSGS`.
 - Forcing openpilot longitudinal with the DSU connected trips the panda's relay-malfunction check (it hears the DSU's 0x343
   on a message it sends itself) → "Harness Relay Malfunction", immediate disable, no entry. This is by design.
 - Unplugged DSU = no stock cruise when openpilot is off and no stock pre-collision braking. The smartDSU keeps AEB. The owner
-  ordered a BearTech C-SDSU (tested by the vendor on a 2019 Sienna). **Unverified until installed:** that it emits 0x2FF like
-  comma's smartDSU. If it does not, openpilot stays on the stock path while the sDSU blocks the DSU → no cruise at all (safe,
-  obvious).
+  installed a BearTech C-SDSU on 2026-10-20; it emits 0x2FF like comma's smartDSU (measured below).
 - "Cruise Fault, restart car" on first use = the PCM's low-speed lockout (`PCM_CRUISE_2.LOW_SPEED_LOCKOUT == 2`) not clearing.
   Community fix from 2020: switch the car fully off with the comma still powered, wait one to two minutes, start again.
 
 **First-drive checklist (either hardware path):** CarParams in the rlog shows `openpilotLongitudinalControl`, `enableDsu` or
 `flags & 2`; no `relayMalfunction` / `controlsMismatch` events; engages below 19 mph; holds a stop and resumes; then the
 longitudinal measurements below.
+
+**First smartDSU drives (2026-10-20, routes 0x10b 47 min and 0x10c 36 min; 0x10a earlier that day was still stock):**
+- CarParams: `flags` 258 (`SMART_DSU` | `NO_STOP_TIMER`), `openpilotLongitudinalControl`, `autoResumeSng`, `enableDsu` false,
+  DSU still answers the fw query. Checklist passed: no relay malfunction, controls mismatch or cruise fault events; 22 min
+  engaged, 8 min of it below 19 mph; held stops of up to 167 s and resumed 0.1–0.3 s after the planner asked to move.
+- 0x2FF: bus 0, 51 Hz, 4 bytes, exactly the RetroPilot `smart_dsu` firmware layout (button, ctrl mode, state|counter,
+  Toyota checksum); checksum and counter good on all 254,725 frames. The DSU's own 0x343 reaches the car only in the first
+  ~10 s after power-on, before openpilot starts sending.
+- `STATE` = 5 (`FAULT_TIMEOUT`) whenever openpilot is in control. Not a fault: the firmware resets its DSU timer only while it
+  forwards the DSU's ACC_CONTROL. 0 before openpilot sends, 3 (CAN error) for 13 frames at one power-on.
+- **Distance button (fixed, opendbc bcfeb730):** on TSS-P it is wired to the DSU, so with the smartDSU openpilot can see it
+  only in 0x2FF `FD_BUTTON`. The restore had left that out (upstream #31741, removed in #32777): 19 presses on these drives,
+  no personality change. Now read with SMART_DSU; replay of both drives gives 19 press/release pairs, CAN valid throughout.
+- Disengagements at highway speed with no pedal: `CRUISE_STATE` 8 → 0 with no fault bit and no cancel from openpilot (once
+  `MAIN_ON` → 0). The cruise stalk is not on the bus, so this reads as the driver cancelling; unconfirmed.
+- Tracking (PID active, no pedals): aEgo − command mean within ±0.04 m/s², rms 0.11–0.13 above 15 m/s, 0.21–0.31 below;
+  aEgo std 0.13–0.18 at set speed. No oscillation seen; no tuning warranted on this data.
 
 ## 5. Longitudinal quality review (vs. the 2020 Reddit thread "2018 Sienna questions")
 
@@ -212,8 +227,9 @@ straight with the hands resting lightly: a firm grip damps both the weave and th
 ## 8. Open items
 
 - Lane offset correction: unmeasured with the correct sign; optional now that the car centers after the remount.
-- sDSU: 0x2FF emission unverified; first drive pending.
-- Longitudinal tuning for the Sienna: pending measurement.
+- sDSU: verified on the first drives (section 4). Distance button fix undriven: check that a press changes the personality
+  and the car's distance bars.
+- Longitudinal tuning for the Sienna: first two drives show good tracking (section 4); revisit only on a complaint.
 - Other TSS-P cars with a stop timer: deliberately left on stock longitudinal (#3076 handling not restored).
 - Driver monitoring settings: unit tests in `test_monitoring.py` written but not yet run; the phone detector as the cause of
   the armrest alerts is unconfirmed until read from a route; settings screens not yet checked on the device.
