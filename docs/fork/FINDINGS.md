@@ -157,7 +157,26 @@ longitudinal measurements below.
 - Disengagements at highway speed with no pedal: `CRUISE_STATE` 8 → 0 with no fault bit and no cancel from openpilot (once
   `MAIN_ON` → 0). The cruise stalk is not on the bus, so this reads as the driver cancelling; unconfirmed.
 - Tracking (PID active, no pedals): aEgo − command mean within ±0.04 m/s², rms 0.11–0.13 above 15 m/s, 0.21–0.31 below;
-  aEgo std 0.13–0.18 at set speed. No oscillation seen; no tuning warranted on this data.
+  aEgo std 0.13–0.18 at set speed. That says the car follows the command; it does not say the command is calm (next item).
+
+**Owner complaints after those drives (2026-10-21) and what the logs say:**
+- *Experimental mode was on* (100 % of engaged time; the model chose the speed 56–63 % of it). The owner had assumed the
+  smartDSU needs it; it does not. Settings → Toggles → Experimental mode off gives the normal planner.
+- *"Brakes very often, little shake":* 99 ACC brake applications while moving, 66 shorter than 1 s, starting at commands
+  of only −0.1 to −0.4 m/s². At a steady 65 mph with no lead (0x10b ~1108–1122 s) the planner asks ≈ 0 but ACCEL_CMD
+  cycles −0.75..+0.55 every ~1.5 s with speed within ±0.15 mph. CarController replay (matches the logged command, mean
+  difference 0.011) puts 65 % of that command variance in the PID integral (std 0.11 vs planner 0.05). The TSS-P `kiV`
+  predates the future-aEgo error (opendbc #1559), which halved TSS2's; halved the same way on branch `tssp-long-ki`
+  (opendbc 983cfc7a), undriven. Falsifier: brake on/off cycles at steady cruise do not drop; cost to watch: hill sag.
+- *"Pulsing pump at low speed, ABS?":* not ABS — `VSC1S07.FABS` never set on either drive. It is the brake actuator pump
+  Toyota uses for ACC braking, cycling with the brake: 17–45 on/off cycles per minute while slowing below 27 mph. There the
+  planner, not the integral, makes 83–96 % of the command swing, and in Experimental mode that is the model.
+- *"Have to tap the gas after a light; bumpy launch":* every held stop ended with the driver's gas. In 7 of 11 the lead had
+  pulled away 0.4–7.2 s before; the model was the plan source and said `shouldStop` for most of that wait. That is
+  Experimental mode's behaviour, not the car port. Launches after the tap: the driver's push to ~1.5 m/s², then openpilot
+  braking back to a lead still creeping at 3–4 mph 10–17 m ahead.
+- Plan: drive with Experimental mode off on the current build first, then `tssp-long-ki`; compare brake cycles per minute
+  at steady cruise and the stop/launch behaviour.
 
 ## 5. Longitudinal quality review (vs. the 2020 Reddit thread "2018 Sienna questions")
 
