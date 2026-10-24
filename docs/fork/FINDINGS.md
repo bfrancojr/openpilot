@@ -145,7 +145,8 @@ longitudinal measurements below.
 **First smartDSU drives (2026-10-20, routes 0x10b 47 min and 0x10c 36 min; 0x10a earlier that day was still stock):**
 - CarParams: `flags` 258 (`SMART_DSU` | `NO_STOP_TIMER`), `openpilotLongitudinalControl`, `autoResumeSng`, `enableDsu` false,
   DSU still answers the fw query. Checklist passed: no relay malfunction, controls mismatch or cruise fault events; 22 min
-  engaged, 8 min of it below 19 mph; held stops of up to 167 s and resumed 0.1–0.3 s after the planner asked to move.
+  engaged, 8 min of it below 19 mph; held stops of up to 167 s. (The "resumed 0.1–0.3 s after the planner asked" first
+  written here measured from the first positive command, which only came after the driver's gas; see the stop bug below.)
 - 0x2FF: bus 0, 51 Hz, 4 bytes, exactly the RetroPilot `smart_dsu` firmware layout (button, ctrl mode, state|counter,
   Toyota checksum); checksum and counter good on all 254,725 frames. The DSU's own 0x343 reaches the car only in the first
   ~10 s after power-on, before openpilot starts sending.
@@ -172,11 +173,29 @@ longitudinal measurements below.
   Toyota uses for ACC braking, cycling with the brake: 17–45 on/off cycles per minute while slowing below 27 mph. There the
   planner, not the integral, makes 83–96 % of the command swing, and in Experimental mode that is the model.
 - *"Have to tap the gas after a light; bumpy launch":* every held stop ended with the driver's gas. In 7 of 11 the lead had
-  pulled away 0.4–7.2 s before; the model was the plan source and said `shouldStop` for most of that wait. That is
-  Experimental mode's behaviour, not the car port. Launches after the tap: the driver's push to ~1.5 m/s², then openpilot
-  braking back to a lead still creeping at 3–4 mph 10–17 m ahead.
+  pulled away 0.4–7.2 s before. First read as Experimental mode holding; **wrong**, see the stop bug below — the car could
+  not resume in either mode. Launches after the tap: the driver's push to ~1.5 m/s², then openpilot braking back to a
+  lead still creeping at 3–4 mph 10–17 m ahead.
 - Plan: drive with Experimental mode off on the current build first, then `tssp-long-ki`; compare brake cycles per minute
   at steady cruise and the stop/launch behaviour.
+
+**Drives on `tssp-long-ki`, Experimental mode off (2026-10-22, routes 0x10d–0x110, 52 min, only 8.6 min openpilot long):**
+- **Stop bug (fixed, opendbc bccd1783, branch `tssp-sng-resume`):** 7 of 7 held stops behind a lead ended with the
+  driver's gas. Throughout each wait `CRUISE_STATE` = 7 → `cruiseState.standstill`, and longcontrol stayed in
+  `stopping`, although the planner had dropped `shouldStop` with a positive target 1.5–15 s before the gas (lead creeping
+  away at 0.5–1 m/s). Deadlock: longcontrol starts only without cruise standstill; carcontroller sends
+  `RELEASE_STANDSTILL` only for a positive command. Pre-#3076 upstream ignored state 7 on NO_STOP_TIMER TSS-P cars
+  ("pcm allows to restart with just an acceleration request"); the restore missed that line. Now restored and pinned
+  (`test_pcm_standstill_ignored_without_stop_timer`, fails without the fix). From the logs, the car would have started
+  0.9–14.8 s sooner per stop. Side effect, as before #3076: `RELEASE_STANDSTILL` is always set, the stop is held by the
+  −2.0 m/s² stopping command alone; the `resumeRequired` alert no longer shows. Undriven: watch for creep at a stop
+  (hills especially) and for stop-go jerk in crawling traffic, where `shouldStop` flickers.
+- *"Still brakes at cruise, subtler":* at ~50 mph short ACC brake applications (0.1–0.7 s, command −0.1..−0.4) while
+  the plan asks −0.1..0, 7 in 2.8 min on 0x10f: the integral, smaller. Not comparable to the 65 mph number above
+  (12 s at > 50 mph on these drives; no steady highway stretch). Needs a highway drive to judge `tssp-long-ki`.
+- *"Pulsing brakes":* each slowdown to a stop is one continuous ACC application (e.g. 48 → 0 mph in 28 s); the pulse is
+  the command wobbling inside it (range −2.0..+0.4 m/s² with many slope reversals) and the actuator pump. openpilot only
+  sends an accel target (`ACCEL_CMD`, `PERMIT_BRAKING`); brake pressure is the car's. Steadier braking = a steadier target.
 
 ## 5. Longitudinal quality review (vs. the 2020 Reddit thread "2018 Sienna questions")
 
