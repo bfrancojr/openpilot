@@ -193,6 +193,16 @@ longitudinal measurements below.
 - *"Still brakes at cruise, subtler":* at ~50 mph short ACC brake applications (0.1–0.7 s, command −0.1..−0.4) while
   the plan asks −0.1..0, 7 in 2.8 min on 0x10f: the integral, smaller. Not comparable to the 65 mph number above
   (12 s at > 50 mph on these drives; no steady highway stretch). Needs a highway drive to judge `tssp-long-ki`.
+- **Cruise coast band (opendbc 61d6e583, branch `tssp-sng-resume`):** why it was smooth before the smartDSU: the stock DSU
+  did the longitudinal. Stock route 0x100 (2026-10-11), 11.5 min of free cruise above 40 mph: 0 ACC brake applications,
+  ACCEL_CMD std 0.04, speed −0.9..+0.1 mph around set; `PERMIT_BRAKING` withheld 69 % of the time above 40 mph and no
+  braking ever without it (so the PCM honours it). openpilot: 2–6 applications/min, `PERMIT_BRAKING` 96 %, 4 of 6 taps at
+  0.0–0.1 mph over set. Change: on non-TSS2 above 10–15 m/s, braking permitted below −0.3 m/s² net request and withdrawn
+  above −0.1 (was 0.2/0.3); integral held both ways while coasting (holding only the braking side ratcheted it toward gas,
+  +0.4..0.6 m/s² in replay). Open-loop CarController replay (baseline matches logged ACCEL_CMD within 0.011,
+  PERMIT_BRAKING 99.9 %): command within 0.02 of baseline, `PERMIT_BRAKING` above 40 mph 96 → 6 % on 0x10f, the set-speed
+  taps no longer permitted, lead-following and real slowdowns still are. Pinned by `test_tssp_coast_band`. Undriven;
+  falsifiers: brake taps still at steady cruise (PCM brakes anyway), or speed creeping > 1–2 mph over set on flat road.
 - *"Pulsing brakes":* each slowdown to a stop is one continuous ACC application (e.g. 48 → 0 mph in 28 s); the pulse is
   the command wobbling inside it (range −2.0..+0.4 m/s² with many slope reversals) and the actuator pump. openpilot only
   sends an accel target (`ACCEL_CMD`, `PERMIT_BRAKING`); brake pressure is the car's. Steadier braking = a steadier target.
